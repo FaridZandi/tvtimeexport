@@ -5,11 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ReelTime — Your watch tracker</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/episodes.css" />
+    <link rel="stylesheet" href="/activity.css" />
+    <link rel="stylesheet" href="/archive.css" />
+    <link rel="stylesheet" href="/calendar.css" />
+    <link rel="stylesheet" href="/mellow.css" />
   </head>
   <body>
     <header><a class="brand" href="#dashboard">reel<span>time</span></a><nav id="nav"></nav><button class="add" id="addButton">＋ Add</button></header>
     <main id="app" aria-live="polite"></main>
     <dialog id="dialog"></dialog>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.21/index.global.min.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

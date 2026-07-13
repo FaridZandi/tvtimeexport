@@ -4,6 +4,7 @@ gdpr-data.zip
 portable-archive/export/
 data/*.sqlite
 data/*.sqlite-*
+.env
 
 # OS/editor noise.
 .DS_Store

@@ -1,0 +1,23 @@
+.calendar-shell { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:var(--shadow); }
+.calendar-hint { color:var(--muted); font-size:13px; margin:12px 2px; }
+.calendar-shell .fc { --fc-border-color:var(--line); --fc-page-bg-color:transparent; --fc-neutral-bg-color:#f8f6f3; --fc-today-bg-color:#f0edff; --fc-event-bg-color:var(--violet); --fc-event-border-color:var(--violet); --fc-event-text-color:#fff; font-family:"DM Sans",system-ui,sans-serif; }
+.calendar-shell .fc .fc-multimonth-title { font:700 21px "Playfair Display",serif; color:var(--ink); padding:13px 8px; }
+.calendar-shell .fc .fc-col-header-cell-cushion { color:var(--muted); font-size:11px; text-decoration:none; padding:7px 0; text-transform:uppercase; letter-spacing:.05em; }
+.calendar-shell .fc .fc-daygrid-day-number { color:var(--ink); text-decoration:none; font-size:12px; padding:5px; }
+.calendar-shell .fc .fc-day-today .fc-daygrid-day-number { background:var(--violet); color:#fff; border-radius:50%; width:25px; height:25px; display:grid; place-items:center; margin:2px; }
+.calendar-shell .fc .fc-daygrid-day-frame { min-height:96px; }
+.calendar-shell .fc .fc-daygrid-day-events { min-height:52px; margin:1px 3px 4px; }
+.calendar-shell .fc .fc-event { border-radius:4px; font-size:11px; line-height:1.25; margin:2px 0; padding:3px 4px; cursor:pointer; white-space:normal; }
+.calendar-shell .fc .fc-event:hover { filter:brightness(.9); }
+.calendar-shell .fc .fc-multimonth-month { border:1px solid #e5ddd4; border-radius:11px; overflow:hidden; margin:10px 0 20px; background:#fffdfa; box-shadow:0 5px 14px #34251608; }
+.calendar-shell .fc .fc-multimonth-month:nth-child(3n + 1) { background:#fffaf6; }
+.calendar-shell .fc .fc-multimonth-month:nth-child(3n + 2) { background:#f9f7ff; }
+.calendar-shell .fc .fc-multimonth-month:nth-child(3n + 3) { background:#f7fbf4; }
+.calendar-shell .fc .fc-multimonth-header { background:#efe9df; }
+.calendar-shell .fc .fc-multimonth-month:nth-child(3n + 2) .fc-multimonth-header { background:#e9e4f8; }
+.calendar-shell .fc .fc-multimonth-month:nth-child(3n + 3) .fc-multimonth-header { background:#e4f0e0; }
+.calendar-shell .fc .episode-tone-0 { background:#7660c5; border-color:#7660c5; }
+.calendar-shell .fc .episode-tone-1 { background:#bd766b; border-color:#bd766b; }
+.calendar-shell .fc .episode-tone-2 { background:#5f9878; border-color:#5f9878; }
+.calendar-shell .fc .episode-tone-3 { background:#a58138; border-color:#a58138; }
+@media(max-width:800px) { .calendar-shell { padding:10px; } .calendar-shell .fc .fc-multimonth-title { font-size:19px; } .calendar-shell .fc .fc-daygrid-day-frame { min-height:78px; } }

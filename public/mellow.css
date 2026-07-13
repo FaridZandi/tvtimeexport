@@ -1,0 +1,15 @@
+:root { --paper:#f2f0ee; --card:#fffcf8; --line:#e4ddd5; --violet:#6e5bc4; --violet-pale:#ebe7fb; --ink:#29252d; --muted:#756f78; --shadow:0 12px 34px #493b2a12; }
+body { background:radial-gradient(circle at 8% 0%,#eee8fb 0,transparent 29rem),radial-gradient(circle at 93% 18%,#faeadc 0,transparent 25rem),linear-gradient(145deg,#f5f1ed,#eef1eb 70%,#f6edeb); }
+header { background:#fffaf2de; border-bottom-color:#dfd6cc; }
+.welcome { background:linear-gradient(108deg,#e7e1f8,#f5e8dd); border:1px solid #dfd4ee; border-radius:16px; padding:24px 26px; box-shadow:var(--shadow); }
+.welcome .secondary { background:#fff9f3b8; }
+.stats { background:#dfd7cf; border-color:#dfd7cf; box-shadow:var(--shadow); }
+.stats div:nth-child(1) { background:#fdf9f3; }.stats div:nth-child(2) { background:#eef5ed; }.stats div:nth-child(3) { background:#f1edfa; }.stats div:nth-child(4) { background:#fbf0e8; }
+.mini-list,.history-list,.episode-list,.movie-card { background:#fffaf5; }
+.calendar-shell { background:linear-gradient(160deg,#fffaf6,#f7f3eb); border-color:#ddd2c8; }
+.calendar-shell .fc { --fc-neutral-bg-color:#f3eee8; --fc-today-bg-color:#eee8fb; }
+.completed-seasons,.archived-library { background:#eee8df; border-color:#ded3c7; }
+.show-card-info { background:#fdf9f4; border-radius:0 0 8px 8px; padding-left:8px; padding-right:8px; }
+.page-top .secondary,.secondary { background:#e8e2f8; color:#524297; }
+.primary,.add { background:#50406f; }
+.empty-state,.empty { background:#fbf7ef; }

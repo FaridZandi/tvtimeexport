@@ -1,0 +1,25 @@
+.season-heading { display:flex; justify-content:space-between; align-items:end; margin:0 0 10px; }
+.season-heading > span { color:var(--muted); font-size:12px; }
+.active-season { border-left:3px solid var(--violet); padding-left:17px; }
+.active-season .season-heading h2 { color:var(--violet); }
+.episode-actions { margin-left:8px; }
+.watch-btn,.rewatch-btn { border-radius:7px; padding:7px 10px; font-size:12px; font-weight:700; white-space:nowrap; }
+.watch-btn { background:var(--ink); color:#fff; }
+.rewatch-btn { background:var(--violet-pale); color:#573cb8; }
+.watch-btn:disabled,.rewatch-btn:disabled { opacity:.55; cursor:wait; }
+.not-aired { color:var(--muted); font-size:12px; white-space:nowrap; }
+.completed-seasons { margin:28px 0; border:1px solid var(--line); border-radius:12px; background:#eeebe5; padding:0 16px; }
+.completed-seasons summary { padding:15px 0; cursor:pointer; font-weight:700; }
+.completed-seasons summary span { float:none; }
+.completed-seasons summary em { float:right; background:#ddd7ce; border-radius:999px; padding:1px 8px; font-size:12px; font-style:normal; font-weight:500; }
+.completed-seasons[open] { padding-bottom:5px; }
+.completed-seasons .season { padding-left:0; border-left:0; }
+.library-section { margin:0 0 46px; }
+.library-section .section-head { align-items:start; margin-bottom:16px; }
+.section-copy { color:var(--muted); margin:4px 0 0; font-size:13px; }
+.archived-library { margin:44px 0 0; padding:0 16px 18px; border:1px solid var(--line); border-radius:12px; background:#eeebe5; }
+.archived-library summary { padding:15px 0; cursor:pointer; font-weight:700; }
+.archived-library summary span { float:right; background:#ddd7ce; border-radius:999px; padding:1px 8px; font-size:12px; font-weight:500; }
+.archived-library[open] { padding-bottom:22px; }
+.poster-year { position:absolute; left:12px; bottom:39px; color:#e8e1f5; font-size:11px; font-weight:700; letter-spacing:.1em; }
+@media(max-width:800px) { .episode-row { gap:8px; } .episode-actions { margin-left:auto; } .watch-btn,.rewatch-btn { padding:6px 8px; } .episode-title b { font-size:13px; } .active-season { padding-left:10px; } }

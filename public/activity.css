@@ -1,0 +1,2 @@
+.activity-link { background:none; padding:0; color:var(--ink); font-weight:700; text-align:left; }
+.activity-link:hover { color:var(--violet); text-decoration:underline; }
