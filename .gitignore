@@ -1,0 +1,9 @@
+# Personal source/export data and locally writable tracker database.
+gdpr-data/
+gdpr-data.zip
+portable-archive/export/
+data/*.sqlite
+data/*.sqlite-*
+
+# OS/editor noise.
+.DS_Store
