@@ -300,5 +300,8 @@ createServer(async (req, res) => {
     if (!file.startsWith(join(root, 'public')) || !existsSync(file)) return json(res, 404, { error: 'Not found' });
     res.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream' });
     res.end(await import('node:fs/promises').then(fs => fs.readFile(file)));
-  } catch (error) { json(res, 400, { error: error.message || 'Request failed' }); }
-}).listen(port, () => console.log(`ReelTime is running at http://localhost:${port}`));
+  } catch (error) {
+    const detail = error.cause?.code ? `${error.message || 'Request failed'} (${error.cause.code})` : (error.message || 'Request failed');
+    json(res, 400, { error: detail });
+  }
+}).listen(port, '127.0.0.1', () => console.log(`ReelTime is running at http://127.0.0.1:${port}`));

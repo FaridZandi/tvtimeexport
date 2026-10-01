@@ -71,6 +71,11 @@ These paths are intentionally ignored by Git:
 
 Only application source, the archive builder, and documentation should be committed.
 
+From App Manager, **Check database** runs SQLite's integrity check against the
+live library. **Create snapshot** uses SQLite's online backup support and stores
+a verified copy under the manager's ignored `.state/backups/` directory. Both
+operations leave the live database and the original GDPR export in place.
+
 ## Development notes
 
 The app has no external runtime service other than optional TheTVDB metadata sync and the FullCalendar browser CDN asset. Its API and UI live in:
