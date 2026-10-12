@@ -17,3 +17,9 @@ dialog:has(.show-search){width:min(640px,calc(100vw - 24px));max-height:calc(100
 .movie-search .match-copy>span:nth-child(4){-webkit-line-clamp:3}
 .movie-poster{width:100%;height:230px;object-fit:cover;border-radius:8px;margin-bottom:12px}
 .movie-overview{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+
+.show-search #movieMatchYear{width:100%;box-sizing:border-box}
+.movie-link-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}.movie-link-actions small{flex-basis:100%;overflow-wrap:anywhere}
+.movie-link-queue{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}.movie-link-review{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-wrap:anywhere}
+.movie-link-review h2{font-size:19px}.movie-link-review p{font-size:13px;color:var(--muted)}
+.show-search>p{font-size:13px;line-height:1.5}.page-actions [hidden]{display:none}

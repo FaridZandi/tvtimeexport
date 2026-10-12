@@ -1,7 +1,7 @@
 # ReelTime project brief
 
 Last verified: 2026-10-12 against source, fixture tests, and the restarted app
-(read-only search/endpoint/UI checks; live add/removal writes were not performed).
+(live review/search/UI and suggestion preparation; real movie links were not confirmed).
 
 ## Purpose and orientation
 
@@ -47,7 +47,8 @@ Optional metadata sync requires `THETVDB_API_KEY=…` in the root `.env`;
 those keys into the shell alone does not configure sync. Never commit credentials.
 
 The browser routes are `#dashboard`, `#shows`, `#upcoming`, `#movies`, `#history`,
-and `#show/<encoded-show-key>`. App Manager also launches the server and uses
+and `#show/<encoded-show-key>`. `#movie-links` opens the legacy movie review queue
+while keeping Movies highlighted in navigation. App Manager also launches the server and uses
 `GET /api/dashboard` for health. Its entry is in
 [manager apps.json](../../apps.json); manager ownership is outside this repository.
 
@@ -73,6 +74,9 @@ and `#show/<encoded-show-key>`. App Manager also launches the server and uses
   Python CSV-to-SQLite/CSV importer. Imported tables include shows, episode watches,
   movie events, ratings, emotions, rewatches, and list memberships. The server adds
   custom shows/movies and cached metadata/catalog tables.
+- [legacy-movies.mjs](legacy-movies.mjs): optional release-year hints from the
+  original tracking CSV and aggregation of legacy/provider movie library cards.
+  `createApp` accepts `movieSourcePath` so fixture tests never read private exports.
 
 TheTVDB owns provider data and authentication; sync is optional for local history.
 App Manager owns process management and manual integrity/snapshot actions; ReelTime
@@ -107,10 +111,29 @@ title-only creation. `provider_movies` stores stable identities and metadata;
 Confirmation saves metadata/status/event together in a transaction. Repeated or
 concurrent confirmation does not duplicate movies or watches; watched entries never
 downgrade to watchlist. Same-name provider IDs remain distinct. Imported events
-and old `custom_movies` stay intact, unlinked, and appear as title-only entries;
-they are not automatically merged with provider movies. Movie cards now show
+and old `custom_movies` stay intact. They start as title-only entries and can be
+explicitly linked through the review workflow; nothing is matched automatically. Movie cards now show
 poster/year/country/runtime/synopsis for confirmed entries. Dashboard movie counts
 use provider keys where available; old records retain title-based counting.
+
+Legacy linking uses `legacy_movie_links` (original title → provider identity and
+metadata) without rewriting any watch/custom records. `legacy_movie_suggestions`
+caches candidates/error status for review. GET `/api/movies/legacy` inventories
+title groups; GET `/api/movies/link-suggestions?title=…` prepares or reuses cached
+candidates (`refresh=1` retries provider lookup). POST `/api/movies/link` requires
+selection plus `expected_provider_id`; `/unlink` checks that expected identity
+before clearing only the association. Stale writes cannot replace a newer link.
+Confirmed legacy/provider identities merge in library display/counts while raw
+history remains unchanged. Re-adding an already-linked watched identity logs no
+new watch or independent movie. Watchlist-to-watched remains an explicit add action.
+
+Year hints are loaded lazily once per process from ignored, read-only
+`gdpr-data/tracking-prod-records.csv` (`movie_name`, `release_date`). Missing or
+malformed files/years yield no hint and do not stop matching. Year breaks ties among
+similarly ranked titles; the original title stays the association key. Multiple
+years are surfaced for review, not split or silently assigned. The queue prepares
+one entry at a time, supports stopping/resuming cached work, and never applies links.
+Skip-for-now is session-local; change/undo actions remain available on linked cards.
 
 Removal preserves original records and caches. `removed_shows` stores membership
 tombstones; `library_shows` combines imported/custom records and `active_shows`
@@ -152,8 +175,8 @@ npm test
 npm run test:browser
 ```
 
-These passed on 2026-10-12 with Node 24.7.0: 22 tests (18 isolated
-provider/API/SQLite tests and four VM UI sync regressions), plus eight Chromium
+These passed on 2026-10-12 with Node 24.7.0: 29 tests (25 isolated
+provider/API/SQLite tests and four VM UI sync regressions), plus eleven Chromium
 browser tests at 1280px and 390px. Fixture teardown removes temporary databases.
 Browser checks cover typing, ranked cards, artwork fallback, keyboard selection and
 confirmation, loading/error/no-results feedback, stale/reopened searches, retry,
@@ -161,7 +184,10 @@ no horizontal dialog overflow, populated show pages, tucked-away removal, exact
 title guards, duplicate entry targeting, removal/restore retries, preserved history
 and restoration of progress. Movie checks cover both entry points, status choice,
 ranked remakes, unknown details, keyboard confirmation, pending state, error retry
-and stale-query/tab/modal guards. Fixture screenshots were
+and stale-query/tab/modal guards. Linking checks verify CSV hints, cache/retry,
+unchanged original fields/status, merging/counts, idempotence, stale writes,
+correction/undo, preparation/stop/resume/skip, keyboard access and mobile dialogs.
+Fixture screenshots were
 visually reviewed. `npm ci --ignore-scripts` also passed against the lockfile.
 Tests require loopback sockets; the sandbox needed an approved escalation.
 The fixture checks mock provider responses and block browser remote requests.
@@ -171,7 +197,11 @@ results. The managed app was restarted again for removal; dashboard and removed-
 endpoints returned HTTP 200, and an older title-only entry displayed Manage show
 and its removal action. A further restart enabled movies: live Dune search returned
 HTTP 200 with three previews and runtimes, and Chrome displayed suggestions with
-status choice/disabled confirmation. No live add/remove/restore was performed. Restart runs normal startup
+status choice/disabled confirmation. Another restart exposed the review queue and
+live three-match linking previews with year hints; suggestions were prepared without
+confirming links. All 260 legacy entries now have prepared caches: 243 with
+candidates, 17 without matches, no request failures, and no confirmed links.
+No live add/remove/restore/link confirmation was performed. Restart runs normal startup
 migrations, but private-data integrity was not separately checked. CDN/calendar,
 archive rebuilding and snapshot/restore remain unverified. Provider capabilities were checked against
 [TheTVDB v4 schema](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).

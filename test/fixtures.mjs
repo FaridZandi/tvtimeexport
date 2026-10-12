@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server.mjs';
 
-export async function fixture() {
+export async function fixture({movieSourcePath = null} = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'reeltime-test-'));
   const db = new DatabaseSync(join(dir, 'fixture.sqlite'));
   db.exec(`CREATE TABLE shows (show_key TEXT PRIMARY KEY, tvtime_show_id TEXT, title TEXT, followed TEXT, favorited TEXT, archived TEXT, episodes_seen_reported TEXT, followed_at TEXT, updated_at TEXT);
@@ -39,7 +39,7 @@ export async function fixture() {
     if (page === '0') return reply({episodes: [{id: Number(id) * 100, seasonNumber: 1, number: 1, name: 'Pilot', aired: '2022-01-01'}]}, true, {links: {next: `/v4/series/${id}/episodes/default?page=1`}});
     return reply({episodes: [{id: Number(id) * 100 + 1, seasonNumber: 2, number: 1, name: 'Return', aired: new Date().toISOString().slice(0,10)}, {id: Number(id) * 100 + 2, seasonNumber: 0, number: 1, name: 'Special'}]}, !state.failPage);
   };
-  const server = createApp({db, fetch: provider, config: () => ({THETVDB_API_KEY: 'fixture-key'})});
+  const server = createApp({db, movieSourcePath, fetch: provider, config: () => ({THETVDB_API_KEY: 'fixture-key'})});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   return {db, state, url, dir, async request(path, input) {

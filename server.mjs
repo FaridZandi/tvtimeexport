@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readMovieHints, legacyMovies, movieLibrary } from './legacy-movies.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 function dotenv() {
@@ -14,7 +15,7 @@ function dotenv() {
 }
 
 // Importing the server never opens the private library. Tests supply their own database and provider.
-export function createApp({ db, fetch = globalThis.fetch, config = dotenv } = {}) {
+export function createApp({ db, fetch = globalThis.fetch, config = dotenv, movieSourcePath = join(root, 'gdpr-data', 'tracking-prod-records.csv') } = {}) {
 if (!db) throw new Error('A database is required');
 
 db.exec(`
@@ -31,6 +32,14 @@ db.exec(`
     movie_key TEXT PRIMARY KEY, tvdb_movie_id TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
     status TEXT NOT NULL, year TEXT, country TEXT, runtime INTEGER,
     poster_url TEXT, overview TEXT, studio TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS legacy_movie_links (
+    legacy_title TEXT PRIMARY KEY, tvdb_movie_id TEXT NOT NULL, provider_title TEXT NOT NULL,
+    year TEXT, country TEXT, runtime INTEGER, poster_url TEXT, overview TEXT, linked_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS legacy_movie_suggestions (
+    legacy_title TEXT PRIMARY KEY, preferred_year TEXT, matches_json TEXT NOT NULL,
+    generated_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT ''
   );
   CREATE TABLE IF NOT EXISTS metadata_shows (
     tvdb_show_id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT,
@@ -76,6 +85,9 @@ db.exec(`
     SELECT * FROM library_shows WHERE NOT EXISTS (SELECT 1 FROM removed_shows r WHERE r.show_key=library_shows.show_key);
 `);
 
+let movieHints;
+const hints = () => movieHints ??= readMovieHints(movieSourcePath);
+const legacy = title => legacyMovies(db, hints()).find(movie => movie.title === title);
 const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 const rows = (sql, ...params) => db.prepare(sql).all(...params);
 const one = (sql, ...params) => db.prepare(sql).get(...params);
@@ -218,7 +230,7 @@ async function confirmShow(id) {
   try { return await pending; } finally { confirmations.delete(id); }
 }
 
-async function searchMatches(query, type) {
+async function searchMatches(query, type, preferredYear = '') {
   const token = await tvdbToken();
   const results = await tvdbGet(`/search?query=${encodeURIComponent(query)}&type=${type}&limit=20`, token);
   if (!Array.isArray(results)) throw new Error('TheTVDB returned invalid search results');
@@ -229,7 +241,7 @@ async function searchMatches(query, type) {
     return names.some(n => n === q) ? 3 : names.some(n => n.startsWith(q)) ? 2 : names.some(n => n.includes(q)) ? 1 : 0;
   };
   const matches = [...new Map(results.filter(r => (!r.type || r.type === type) && /^\d+$/.test(String(r.tvdb_id))).map(r => [String(r.tvdb_id), r])).values()]
-    .sort((a, b) => rank(b) - rank(a)).slice(0, 3);
+    .sort((a, b) => rank(b) - rank(a) || (preferredYear ? Number(b.year === preferredYear) - Number(a.year === preferredYear) : 0)).slice(0, 3);
   return { token, matches };
 }
 
@@ -259,8 +271,8 @@ async function loadMovie(id, token) {
     studio: (movie.studios || []).map(studio => studio.name).filter(Boolean).join(', ') };
 }
 
-async function searchMovies(query) {
-  const { token, matches } = await searchMatches(query, 'movie');
+async function searchMovies(query, preferredYear = '') {
+  const { token, matches } = await searchMatches(query, 'movie', preferredYear);
   return Promise.all(matches.map(async result => {
     let details = {}, detailsError = '';
     try { details = await loadMovie(result.tvdb_id, token); }
@@ -278,7 +290,11 @@ async function confirmMovie(id, requestedStatus) {
   const key = `tvdb-movie:${id}`, timestamp = now();
   // Read after the provider request so concurrent confirmations see earlier commits.
   const existing = one('SELECT * FROM provider_movies WHERE tvdb_movie_id=?', id);
-  const status = existing?.status === 'watched' ? 'watched' : requestedStatus;
+  const linked = movieLibrary(db).find(item => item.movie_key === key);
+  const alreadyWatched = Boolean(linked?.watched);
+  const status = alreadyWatched ? 'watched' : requestedStatus;
+  if (!existing && linked && (alreadyWatched || requestedStatus === 'watchlist')) return { movie_key: key, existing: true, title: movie.title, status };
+
   db.exec('BEGIN');
   try {
     run(`INSERT INTO provider_movies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -286,13 +302,46 @@ async function confirmMovie(id, requestedStatus) {
       year=excluded.year, country=excluded.country, runtime=excluded.runtime, poster_url=excluded.poster_url,
       overview=excluded.overview, studio=excluded.studio, updated_at=excluded.updated_at`,
       key, id, movie.title, status, movie.year, movie.country, movie.runtime, movie.poster_url, movie.overview, movie.studio, timestamp, timestamp);
-    if (status === 'watched' && existing?.status !== 'watched') {
+    if (status === 'watched' && !alreadyWatched) {
       run(`INSERT INTO movie_events (title, event_type, event_key, event_at, updated_at, watch_date, rewatch_count, movie_key)
         VALUES (?, 'watch', ?, ?, ?, ?, '', ?)`, movie.title, `local-${crypto.randomUUID()}`, timestamp, timestamp, timestamp, key);
     }
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
-  return { movie_key: key, existing: Boolean(existing), title: movie.title, status };
+  return { movie_key: key, existing: Boolean(existing || linked), title: movie.title, status };
+}
+
+async function linkMovie(input) {
+  const originalTitle = String(input.legacy_title || '');
+  const id = String(input.provider_id || '');
+  if (!legacy(originalTitle)) throw new Error('Original movie entry not found');
+  if (!/^\d+$/.test(id)) throw new Error('Select a movie match to confirm the link');
+  const movie = await loadMovie(id, await tvdbToken());
+  const current = one('SELECT tvdb_movie_id FROM legacy_movie_links WHERE legacy_title=?', originalTitle)?.tvdb_movie_id || null;
+  if (current !== input.expected_provider_id && current !== id) throw new Error('This link changed. Reload the movie before confirming.');
+  run(`INSERT INTO legacy_movie_links VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(legacy_title) DO UPDATE SET tvdb_movie_id=excluded.tvdb_movie_id, provider_title=excluded.provider_title,
+    year=excluded.year, country=excluded.country, runtime=excluded.runtime, poster_url=excluded.poster_url,
+    overview=excluded.overview, linked_at=excluded.linked_at`, originalTitle, id, movie.title, movie.year, movie.country, movie.runtime, movie.poster_url, movie.overview, now());
+  return { legacy_title: originalTitle, provider_id: id, history_preserved: true };
+}
+
+async function movieSuggestions(title, refresh = false) {
+  const entry = legacy(title);
+  if (!entry) throw new Error('Original movie entry not found');
+  const preferredYear = entry.source_years.length === 1 ? entry.source_years[0] : '';
+  const cached = one('SELECT * FROM legacy_movie_suggestions WHERE legacy_title=?', title);
+  if (!refresh && cached && !cached.error && cached.preferred_year === preferredYear) return { ...entry, matches: JSON.parse(cached.matches_json) };
+  try {
+    const matches = await searchMovies(title, preferredYear);
+    run(`INSERT INTO legacy_movie_suggestions VALUES (?, ?, ?, ?, '') ON CONFLICT(legacy_title) DO UPDATE SET
+      preferred_year=excluded.preferred_year, matches_json=excluded.matches_json, generated_at=excluded.generated_at, error=''`, title, preferredYear, JSON.stringify(matches), now());
+    return { ...entry, matches };
+  } catch (error) {
+    run(`INSERT INTO legacy_movie_suggestions VALUES (?, ?, '[]', ?, ?) ON CONFLICT(legacy_title) DO UPDATE SET
+      error=excluded.error, generated_at=excluded.generated_at`, title, preferredYear, now(), error.message);
+    throw error;
+  }
 }
 
 async function syncFollowedShows() {
@@ -327,12 +376,13 @@ function cleanText(value, label) {
 }
 
 function dashboard() {
+  const movieList = movieLibrary(db);
   const stats = {
     shows: one(`SELECT COUNT(*) AS n FROM active_shows`).n,
     following: one(`SELECT COUNT(*) AS n FROM active_shows WHERE followed = '1' AND archived != '1'`).n,
     episodes: one(`SELECT COUNT(*) AS n FROM episode_watches`).n,
-    moviesWatched: one(`SELECT COUNT(DISTINCT COALESCE(movie_key, 'title:' || title)) AS n FROM movie_events WHERE event_type = 'watch'`).n,
-    watchlistMovies: one(`SELECT COUNT(DISTINCT title) AS n FROM movie_events WHERE event_type IN ('towatch', 'watchlist')`).n + one(`SELECT COUNT(*) AS n FROM custom_movies WHERE status = 'watchlist'`).n + one(`SELECT COUNT(*) AS n FROM provider_movies WHERE status='watchlist'`).n,
+    moviesWatched: movieList.filter(movie => movie.watched).length,
+    watchlistMovies: movieList.filter(movie => movie.watchlist).length,
   };
   const recent = rows(`
     SELECT w.show_title AS title, 'Episode' AS kind, w.season_number, w.episode_number, w.watched_at AS occurred_at, CASE WHEN EXISTS(SELECT 1 FROM removed_shows r WHERE r.show_key=w.show_key) THEN NULL ELSE w.show_key END AS show_key, m.first_aired
@@ -359,8 +409,20 @@ function api(req, res, url) {
   }
   if (req.method === 'GET' && path === '/api/movies/search') {
     const query = cleanText(url.searchParams.get('q'), 'Search');
-    return searchMovies(query).then(matches => json(res, 200, matches));
+    return searchMovies(query, /^\d{4}$/.test(url.searchParams.get('year') || '') ? url.searchParams.get('year') : '').then(matches => json(res, 200, matches));
   }
+  if (req.method === 'GET' && path === '/api/movies/legacy') return json(res, 200, legacyMovies(db, hints()));
+  if (req.method === 'GET' && path === '/api/movies/link-suggestions') {
+    return movieSuggestions(url.searchParams.get('title') || '', url.searchParams.get('refresh') === '1').then(result => json(res, 200, result));
+  }
+  if (req.method === 'POST' && path === '/api/movies/link') return body(req).then(input => linkMovie(input)).then(result => json(res, 200, result));
+  if (req.method === 'POST' && path === '/api/movies/unlink') return body(req).then(input => {
+    const title = String(input.legacy_title || '');
+    const current = one('SELECT tvdb_movie_id FROM legacy_movie_links WHERE legacy_title=?', title)?.tvdb_movie_id;
+    if (!current || current !== input.expected_provider_id) throw new Error('This link changed. Reload the movie before undoing it.');
+    run('DELETE FROM legacy_movie_links WHERE legacy_title=?', title);
+    return json(res, 200, { legacy_title: title, history_preserved: true });
+  });
   if (req.method === 'GET' && path === '/api/shows/removed') {
     return json(res, 200, rows(`SELECT s.show_key, s.title, s.tvtime_show_id, r.removed_at,
       (SELECT COUNT(*) FROM episode_watches w WHERE w.show_key=s.show_key) AS watch_count
@@ -391,17 +453,7 @@ function api(req, res, url) {
       FROM active_shows library LEFT JOIN metadata_shows m ON m.tvdb_show_id=library.tvtime_show_id
       WHERE library.title LIKE ? ORDER BY library.archived, library.followed DESC, library.title COLLATE NOCASE`, filter));
   }
-  if (req.method === 'GET' && path === '/api/movies') {
-    return json(res, 200, rows(`
-      SELECT title, MAX(CASE WHEN event_type='watch' THEN 1 ELSE 0 END) AS watched,
-             MAX(CASE WHEN event_type IN ('towatch','watchlist') THEN 1 ELSE 0 END) AS watchlist,
-             MAX(event_at) AS last_activity, NULL AS movie_key, NULL AS tvdb_movie_id,
-             NULL AS year, NULL AS country, NULL AS runtime, NULL AS poster_url, NULL AS overview
-      FROM movie_events WHERE movie_key IS NULL GROUP BY title
-      UNION ALL SELECT title, status='watched', status='watchlist', updated_at, NULL, NULL, NULL, NULL, NULL, NULL, NULL FROM custom_movies
-      UNION ALL SELECT title, status='watched', status='watchlist', updated_at, movie_key, tvdb_movie_id, year, country, runtime, poster_url, overview FROM provider_movies
-      ORDER BY last_activity DESC, title COLLATE NOCASE`));
-  }
+  if (req.method === 'GET' && path === '/api/movies') return json(res, 200, movieLibrary(db, hints()));
   if (req.method === 'GET' && path === '/api/history') {
     return json(res, 200, rows(`
       SELECT show_title AS title, 'episode' AS type, season_number, episode_number, event_kind, watched_at AS occurred_at FROM episode_watches

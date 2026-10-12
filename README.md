@@ -74,6 +74,32 @@ Same-name movies with different provider IDs remain separate. Older title-only
 entries/history stay intact and are labeled separately; no identities are guessed
 from titles. Failed search/add requests can be retried in the dialog.
 
+## Linking older movies
+
+Choose **Movies → Review movie links**. **Prepare suggestions** searches the
+unlinked entries in sequence and saves candidates for review; **Stop preparation**
+keeps completed suggestions. Preparing suggestions never confirms a link.
+You can also choose **Link movie data** on an individual older movie card.
+
+The dialog searches the original title and uses a release-year hint when available
+from `gdpr-data/tracking-prod-records.csv`. You can edit the title/year, refresh
+suggestions, select a match and **Confirm link**, or **Skip for now**. Missing or
+conflicting source years are labeled. Year hints rank equally good title matches;
+they are not proof that a suggestion is correct.
+
+Linking attaches metadata to the original title group without changing watch
+records, dates, rewatch counts, ratings or watched/watchlist status. Entries linked
+to the same provider movie share a library card; their histories remain separate
+original records. **Change movie link** corrects a match and **Undo link** restores
+the original title-only presentation. Both actions preserve history. If one original
+title represents several different releases, review carefully: this workflow does
+not split that history automatically.
+
+The original export is optional and read only. If it is unavailable, title search
+still works without year hints. Hints refresh after a server restart; suggestions
+persist in the local database until refreshed. Skipping is for the current session
+and leaves the movie unlinked.
+
 ## Removing and restoring shows
 
 Open a show, expand **Manage show**, and choose **Remove from library…**.
