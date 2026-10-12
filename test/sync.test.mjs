@@ -26,7 +26,7 @@ async function page(reply) {
       return {ok: true, json: async () => []};
     },
   });
-  vm.runInContext(await readFile(new URL('../public/app.js', import.meta.url), 'utf8'), context);
+  vm.runInContext((await readFile(new URL('../public/app.js', import.meta.url), 'utf8')).replace(/^import .*\n/, ''), context);
   await new Promise(resolve => setImmediate(resolve));
   return {
     app, syncButton,

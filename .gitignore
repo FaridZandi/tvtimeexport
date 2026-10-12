@@ -8,3 +8,6 @@ data/*.sqlite-*
 
 # OS/editor noise.
 .DS_Store
+
+# Development dependencies.
+node_modules/

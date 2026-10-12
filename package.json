@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node --test test/browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
   }
 }

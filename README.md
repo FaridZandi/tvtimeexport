@@ -6,6 +6,7 @@ ReelTime is a private, local-first TV and movie tracker built from a TV Time GDP
 
 - Imports the useful, non-sensitive parts of a TV Time GDPR export.
 - Tracks shows, episodes, rewatches, movies, ratings, and personal lists.
+- Searches TheTVDB for three ranked show matches and syncs the confirmed show automatically.
 - Syncs episode guides, statuses, air dates, posters, and backdrops from TheTVDB.
 - Provides show pages with season progress and one-click Watch/Rewatch actions.
 - Displays upcoming followed-show releases in a three-month calendar.
@@ -47,6 +48,17 @@ python3 portable-archive/build_archive.py
 
 The builder intentionally excludes account credentials, tokens, devices, IP addresses, and analytics data. See [portable-archive/README.md](portable-archive/README.md) for the exported-table details.
 
+## Adding a show
+
+Choose **Add → Show** and type a title. Inspect up to three ranked matches with
+artwork, year/country/network, and season/episode counts, then select a match and
+choose **Confirm and add**. Counts use the provider's default season order and
+exclude specials; unavailable counts are labeled unknown. Nothing is saved until
+the complete guide loads. Failed additions keep the selection available for retry,
+and confirming an identity already in the library opens the existing show.
+Shows with no available episodes cannot be added yet. Existing title-only local
+shows are preserved; this flow does not guess identities for them.
+
 ## Syncing metadata
 
 Use **Sync episode guides** in the app to refresh every show in the library. The server authenticates to TheTVDB using the key in `.env`; the browser never receives the key.
@@ -83,3 +95,23 @@ The app has no external runtime service other than optional TheTVDB metadata syn
 - `server.mjs` — local HTTP server, SQLite storage, TheTVDB sync
 - `public/app.js` — single-page UI
 - `public/*.css` — presentation and component styling
+
+## Verification
+
+```sh
+node --check server.mjs
+node --check public/app.js
+node --check public/show-search.js
+npm test
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+The server has no npm runtime dependencies. Playwright is a development dependency
+for browser checks. API tests and browser tests use temporary SQLite fixtures and
+mock TheTVDB; browser checks block remote requests. They never open the live
+library or require your API key. Tests require permission to bind a loopback port.
+The browser suite covers keyboard confirmation, stale searches, retry, a populated
+show page, and desktop/390px layout. It writes fixture screenshots to the OS temp
+directory. Live provider/CDN access and private-library migrations are not covered.

@@ -21,8 +21,9 @@ fix is recorded in TODO.md and commit `f2267c7` (four simulated UI tests).
 
 From the project root, use Node.js 24+ and `npm start` (equivalent to
 `node server.mjs`). Open `http://127.0.0.1:3000/`; `PORT=3001 npm start` changes
-the port. Binding is always `127.0.0.1`. There are no npm dependencies or build
-step in [package.json](package.json).
+the port. Binding is always `127.0.0.1`. There are no npm runtime dependencies or build
+step in [package.json](package.json). Playwright 1.62.1 is a pinned development
+dependency for browser checks (`npm ci`, `npx playwright install chromium`).
 
 A fresh checkout needs the private seed `portable-archive/export/tvtime-archive.sqlite`
 before first startup; an existing `data/reeltime.sqlite` bypasses that copy.
@@ -45,10 +46,14 @@ and `#show/<encoded-show-key>`. App Manager also launches the server and uses
 
 - [server.mjs](server.mjs): Node HTTP/static server, JSON `/api/*` routes,
   synchronous `node:sqlite` access, startup schema upgrades/data corrections,
-  and TheTVDB v4 login/metadata requests. GET routes serve dashboard, shows,
+  and TheTVDB v4 login/search/metadata requests. `createApp({db, fetch, config})`
+  allows fixture tests to inject a database and provider; importing the module
+  does not open the private library. GET routes serve dashboard, shows,
   movies, history, upcoming releases, and show episode details. POST/PATCH routes
   add items, update show flags, log watches, and sync guides.
-- [public/app.js](public/app.js): vanilla JavaScript hash-routed UI using those
+- [public/app.js](public/app.js): vanilla JavaScript hash-routed UI;
+  [public/show-search.js](public/show-search.js) owns the debounced search/confirmation
+  dialog, selection and stale-response guards. The UI uses those
   APIs; [public/index.html](public/index.html) loads component CSS and the
   FullCalendar 6.1.21 Standard browser bundle from jsDelivr. Calendar rendering
   needs that CDN asset; metadata artwork URLs also load remotely in the browser.
@@ -82,12 +87,22 @@ Ownership and behavior were checked in [dashboard.py](../../dashboard.py) and
 canonical backlog before proposing a restore procedure.
 
 Sync processes imported shows with nonempty provider IDs, including archived or
-unfollowed shows, despite its internal function name. New custom shows have no
-provider ID and are not included. Each successful guide replacement is transactional;
-other shows may fail independently. The UI currently reports only the failure count.
+unfollowed shows, despite its internal function name. Bulk sync now includes
+provider-linked custom shows. Existing title-only custom shows remain untouched and cannot sync until they have a provider identity.
+Add Show searches up to 20 provider results, ranks exact/alias, prefix and substring
+matches ahead of the provider's remaining order, and previews at most three.
+Preview counts come from the complete default-order guide (including announced
+empty seasons in that order, excluding specials); retrieval failure shows unknown.
+Confirmation accepts a provider ID and atomically stores custom identity, metadata,
+default-order seasons in `season_catalog`, and all paginated episodes. Empty guides
+are rejected. Failures save nothing and allow retry; existing identities/history
+are preserved and concurrent/repeated confirmations reuse one show.
+Each successful guide replacement is transactional; other shows may fail
+independently. The bulk-sync UI currently reports only the failure count.
 Upcoming data covers followed, unarchived imported shows, excludes specials, and is
-limited to 100 releases over the next three months. Ratings/emotions remain raw
-codes and movie external IDs/list-title resolution are incomplete (archive guide).
+limited to 100 releases over the next three months; provider-linked custom shows
+are included. Ratings/emotions remain raw codes and movie external IDs/list-title
+resolution are incomplete (archive guide).
 
 ## Verify and maintain
 
@@ -96,19 +111,27 @@ Run from the root:
 ```sh
 node --check server.mjs
 node --check public/app.js
+node --check public/show-search.js
 npm test
+npm run test:browser
 ```
 
-These passed on the last-verified date with Node 24.7.0: four UI sync tests using
-VM/DOM/fetch stubs. They do not exercise SQLite, real browser rendering, live
-TheTVDB/CDN access, archive rebuilding, or snapshot/restore operations. This brief's
-run/data claims were checked against code/configuration, without opening private
-data or starting the live server; those runtime paths remain unverified here.
+These passed on the last-verified date with Node 24.7.0: 12 tests (eight isolated
+provider/API/SQLite tests and four VM UI sync regressions), plus three Chromium
+browser tests at 1280px and 390px. Fixture teardown removes temporary databases.
+Browser checks cover typing, ranked cards, artwork fallback, keyboard selection and
+confirmation, loading/error/no-results feedback, stale/reopened searches, retry,
+no horizontal dialog overflow, and populated show pages. Fixture screenshots were
+visually reviewed. `npm ci --ignore-scripts` also passed against the lockfile.
+Tests require loopback sockets; the sandbox needed an approved escalation.
+Provider/CDN access is mocked or blocked; no private database/export, live provider,
+archive rebuild, or snapshot/restore was exercised. Production startup/migrations
+remain unverified against private data. Provider capabilities were checked against
+[TheTVDB v4 schema](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).
 
 Before changing this brief, re-read TODO.md and inspect Git changes. Maintain it
 when entry points, commands, architecture, dependencies, persistence, or established
 decisions change; update the verification date and limits. Keep secrets/personal
 records out, link supporting sources, label uncertainties, and leave task tracking
-in TODO.md. At this review the branch was `main` tracking `origin/main`, with only
-AGENTS.md and TODO.md untracked before assignment edits; re-check rather than
-assuming that state persists.
+in TODO.md. The reviewed branch is `main` tracking `origin/main`; re-check rather
+than assuming that state persists.
