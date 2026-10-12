@@ -98,6 +98,11 @@ The app has no external runtime service other than optional TheTVDB metadata syn
 
 ## Verification
 
+After changing server code, restart ReelTime through App Manager (or run
+`python3 ../../appmanager.py restart reeltime` from this directory), then verify
+the changed endpoint against the running app. The server does not reload itself
+automatically; refresh the browser to load changed assets.
+
 ```sh
 node --check server.mjs
 node --check public/app.js

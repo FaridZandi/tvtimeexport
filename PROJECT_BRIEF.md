@@ -1,6 +1,7 @@
 # ReelTime project brief
 
-Last verified: 2026-10-11 against source, configuration, and local checks.
+Last verified: 2026-10-12 for live search/restart behavior; source and fixture checks
+last verified 2026-10-11.
 
 ## Purpose and orientation
 
@@ -32,6 +33,13 @@ To build the seed from an available `gdpr-data/` export, run
 This is an explicit rebuild operation, not a development check: it removes the
 existing generated `export/` directory first. See the
 [archive guide](portable-archive/README.md) for source/export semantics.
+
+Server source changes require a process restart: App Manager does not reload the
+Node server automatically. After publishing server changes, use App Manager's
+ReelTime **Restart** (CLI: `python3 ../../appmanager.py restart reeltime`) and verify
+the changed endpoint against the running app. New browser assets can load while
+an older process still serves old API handlers; a search endpoint returning 404
+was resolved by restart on 2026-10-12. A browser reload may also be needed.
 
 Optional metadata sync requires `THETVDB_API_KEY=…` in the root `.env`;
 `API_KEY` is a compatibility alias. The server reads that file itself; exporting
@@ -116,7 +124,7 @@ npm test
 npm run test:browser
 ```
 
-These passed on the last-verified date with Node 24.7.0: 12 tests (eight isolated
+These passed on 2026-10-11 with Node 24.7.0: 12 tests (eight isolated
 provider/API/SQLite tests and four VM UI sync regressions), plus three Chromium
 browser tests at 1280px and 390px. Fixture teardown removes temporary databases.
 Browser checks cover typing, ranked cards, artwork fallback, keyboard selection and
@@ -124,9 +132,12 @@ confirmation, loading/error/no-results feedback, stale/reopened searches, retry,
 no horizontal dialog overflow, and populated show pages. Fixture screenshots were
 visually reviewed. `npm ci --ignore-scripts` also passed against the lockfile.
 Tests require loopback sockets; the sandbox needed an approved escalation.
-Provider/CDN access is mocked or blocked; no private database/export, live provider,
-archive rebuild, or snapshot/restore was exercised. Production startup/migrations
-remain unverified against private data. Provider capabilities were checked against
+The fixture checks mock provider responses and block browser remote requests.
+On 2026-10-12 the managed app restarted successfully; live read-only provider search
+returned three populated matches and the existing Chrome dialog displayed Pantheon
+results. No live confirmation/write was performed. Restart runs normal startup
+migrations, but private-data integrity was not separately checked. CDN/calendar,
+archive rebuilding and snapshot/restore remain unverified. Provider capabilities were checked against
 [TheTVDB v4 schema](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).
 
 Before changing this brief, re-read TODO.md and inspect Git changes. Maintain it
