@@ -59,6 +59,18 @@ and confirming an identity already in the library opens the existing show.
 Shows with no available episodes cannot be added yet. Existing title-only local
 shows are preserved; this flow does not guess identities for them.
 
+## Removing and restoring shows
+
+Open a show, expand **Manage show**, and choose **Remove from library…**.
+The dialog identifies the entry and requires typing its exact title before you
+can confirm. Removal hides only that entry from the library, queue, upcoming
+releases and bulk sync. Watch history, progress, show flags and cached guides stay
+in the database. This works for older title-only entries too.
+
+Restore an entry from **Shows → Removed shows**. Confirming the same provider match
+through Add Show also brings its existing entry back. Removal has no permanent
+delete option; archive remains available for simply setting a show aside.
+
 ## Syncing metadata
 
 Use **Sync episode guides** in the app to refresh every show in the library. The server authenticates to TheTVDB using the key in `.env`; the browser never receives the key.
@@ -117,6 +129,6 @@ The server has no npm runtime dependencies. Playwright is a development dependen
 for browser checks. API tests and browser tests use temporary SQLite fixtures and
 mock TheTVDB; browser checks block remote requests. They never open the live
 library or require your API key. Tests require permission to bind a loopback port.
-The browser suite covers keyboard confirmation, stale searches, retry, a populated
-show page, and desktop/390px layout. It writes fixture screenshots to the OS temp
+The browser suite covers search/confirmation, cautious removal and restoration,
+stale searches, retry, populated show pages, and desktop/390px layout. It writes fixture screenshots to the OS temp
 directory. Live provider/CDN access and private-library migrations are not covered.

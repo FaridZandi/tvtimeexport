@@ -1,7 +1,7 @@
 # ReelTime project brief
 
-Last verified: 2026-10-12 for live search/restart behavior; source and fixture checks
-last verified 2026-10-11.
+Last verified: 2026-10-12 against source, fixture tests, and the restarted app
+(read-only endpoint/UI checks; live removal was not performed).
 
 ## Purpose and orientation
 
@@ -9,8 +9,9 @@ ReelTime is a private, local-first TV/movie tracker seeded from a TV Time GDPR
 export. It preserves watch/rewatch history, show progress, archived shows, movie
 activity, and cached episode guides. The recorded product direction is local
 storage without social features ([README.md](README.md)); this is documented
-intent, not evidence of additional personal preferences. No other user preferences
-or standalone historical plans were found in the project.
+intent. The user explicitly requested that show removal take deliberate effort
+and preserve watch history; see REEL-007 in TODO.md. No standalone historical plans
+were found in the project.
 
 Read [AGENTS.md](AGENTS.md) for workflow and [TODO.md](TODO.md) for the canonical
 current work, priorities, dependencies, and evidence. Current work concerns sync
@@ -58,10 +59,12 @@ and `#show/<encoded-show-key>`. App Manager also launches the server and uses
   allows fixture tests to inject a database and provider; importing the module
   does not open the private library. GET routes serve dashboard, shows,
   movies, history, upcoming releases, and show episode details. POST/PATCH routes
-  add items, update show flags, log watches, and sync guides.
+  add items, update show flags, remove/restore library membership, log watches, and sync guides.
 - [public/app.js](public/app.js): vanilla JavaScript hash-routed UI;
   [public/show-search.js](public/show-search.js) owns the debounced search/confirmation
-  dialog, selection and stale-response guards. The UI uses those
+  dialog, selection and stale-response guards. Show pages include a collapsed
+  Manage show section with typed-title removal confirmation; the library includes
+  a Removed shows restore section. The UI uses those
   APIs; [public/index.html](public/index.html) loads component CSS and the
   FullCalendar 6.1.21 Standard browser bundle from jsDelivr. Calendar rendering
   needs that CDN asset; metadata artwork URLs also load remotely in the browser.
@@ -94,9 +97,19 @@ Ownership and behavior were checked in [dashboard.py](../../dashboard.py) and
 [tools/data_ops.py](../../tools/data_ops.py). Recovery remains unverified; use the
 canonical backlog before proposing a restore procedure.
 
+Removal preserves original records and caches. `removed_shows` stores membership
+tombstones; `library_shows` combines imported/custom records and `active_shows`
+excludes tombstones. Library counts, queue, upcoming, watches and bulk sync use
+active membership. History/recent activity keep prior watches; removed entries
+lose their recent-activity navigation link. Removed show routes offer a library
+return/restore hint. GET `/api/shows/removed` lists restorable entries; POST
+`/api/shows/:key/remove` requires an exact `confirm_title`, while `/restore`
+clears the tombstone without changing flags or history. Re-confirming a provider
+identity reuses/restores it. Upcoming responses carry the actual `show_key` so
+custom entries navigate correctly. No permanent-delete operation is provided.
+
 Sync processes imported shows with nonempty provider IDs, including archived or
-unfollowed shows, despite its internal function name. Bulk sync now includes
-provider-linked custom shows. Existing title-only custom shows remain untouched and cannot sync until they have a provider identity.
+unfollowed shows, despite its internal function name. Bulk sync includes provider-linked custom shows and excludes removed entries. Existing title-only custom shows remain untouched and cannot sync until they have a provider identity.
 Add Show searches up to 20 provider results, ranks exact/alias, prefix and substring
 matches ahead of the provider's remaining order, and previews at most three.
 Preview counts come from the complete default-order guide (including announced
@@ -124,18 +137,22 @@ npm test
 npm run test:browser
 ```
 
-These passed on 2026-10-11 with Node 24.7.0: 12 tests (eight isolated
-provider/API/SQLite tests and four VM UI sync regressions), plus three Chromium
+These passed on 2026-10-12 with Node 24.7.0: 17 tests (13 isolated
+provider/API/SQLite tests and four VM UI sync regressions), plus five Chromium
 browser tests at 1280px and 390px. Fixture teardown removes temporary databases.
 Browser checks cover typing, ranked cards, artwork fallback, keyboard selection and
 confirmation, loading/error/no-results feedback, stale/reopened searches, retry,
-no horizontal dialog overflow, and populated show pages. Fixture screenshots were
+no horizontal dialog overflow, populated show pages, tucked-away removal, exact
+title guards, duplicate entry targeting, removal/restore retries, preserved history
+and restoration of progress. Fixture screenshots were
 visually reviewed. `npm ci --ignore-scripts` also passed against the lockfile.
 Tests require loopback sockets; the sandbox needed an approved escalation.
 The fixture checks mock provider responses and block browser remote requests.
 On 2026-10-12 the managed app restarted successfully; live read-only provider search
 returned three populated matches and the existing Chrome dialog displayed Pantheon
-results. No live confirmation/write was performed. Restart runs normal startup
+results. The managed app was restarted again for removal; dashboard and removed-show
+endpoints returned HTTP 200, and an older title-only entry displayed Manage show
+and its removal action. No live add/remove/restore was performed. Restart runs normal startup
 migrations, but private-data integrity was not separately checked. CDN/calendar,
 archive rebuilding and snapshot/restore remain unverified. Provider capabilities were checked against
 [TheTVDB v4 schema](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).

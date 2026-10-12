@@ -55,6 +55,17 @@ for (const [column, definition] of [['poster_url', 'TEXT'], ['backdrop_url', 'TE
   if (!db.prepare('PRAGMA table_info(metadata_shows)').all().some(entry => entry.name === column)) db.exec(`ALTER TABLE metadata_shows ADD COLUMN ${column} ${definition}`);
 }
 
+// Keep original records and watch history; removal only changes library membership.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS removed_shows (show_key TEXT PRIMARY KEY, removed_at TEXT NOT NULL);
+  CREATE VIEW IF NOT EXISTS library_shows AS
+    SELECT show_key, tvtime_show_id, title, followed, favorited, archived, episodes_seen_reported, followed_at, updated_at FROM shows
+    UNION ALL
+    SELECT show_key, tvtime_show_id, title, followed, favorited, archived, episodes_seen_reported, followed_at, updated_at FROM custom_shows;
+  CREATE VIEW IF NOT EXISTS active_shows AS
+    SELECT * FROM library_shows WHERE NOT EXISTS (SELECT 1 FROM removed_shows r WHERE r.show_key=library_shows.show_key);
+`);
+
 const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 const rows = (sql, ...params) => db.prepare(sql).all(...params);
 const one = (sql, ...params) => db.prepare(sql).get(...params);
@@ -151,7 +162,7 @@ async function loadGuide(id, token) {
 
 }
 
-function saveGuide(show, { series, episodes, seasons }, add = false) {
+function saveGuide(show, { series, episodes, seasons }, add = false, restore = false) {
   const syncedAt = now();
   db.exec('BEGIN');
   try {
@@ -167,6 +178,7 @@ function saveGuide(show, { series, episodes, seasons }, add = false) {
     run('DELETE FROM episode_catalog WHERE tvdb_show_id=?', String(show.tvtime_show_id));
     const insert = db.prepare('INSERT INTO episode_catalog VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const episode of episodes) insert.run(String(episode.id), String(show.tvtime_show_id), Number(episode.seasonNumber ?? 0), Number(episode.number ?? 0), episode.name || '', episode.overview || '', episode.aired || '', episode.runtime ?? null, Number(episode.seasonNumber) === 0 ? 1 : 0, String(episode.lastUpdated || ''), syncedAt);
+    if (restore) run('DELETE FROM removed_shows WHERE show_key=?', show.show_key);
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
   return episodes.length;
@@ -180,13 +192,16 @@ const confirmations = new Map();
 async function confirmShow(id) {
   if (confirmations.has(id)) return confirmations.get(id);
   const pending = (async () => {
-    const existing = one('SELECT show_key, tvtime_show_id, title FROM shows WHERE tvtime_show_id=? UNION ALL SELECT show_key, tvtime_show_id, title FROM custom_shows WHERE tvtime_show_id=?', id, id);
+    const existing = one('SELECT show_key, tvtime_show_id, title FROM library_shows WHERE tvtime_show_id=?', id);
     // A repeated confirmation of a fully synced identity is idempotent.
-    if (existing && one('SELECT tvdb_show_id FROM metadata_shows WHERE tvdb_show_id=?', id) && one('SELECT tvdb_episode_id FROM episode_catalog WHERE tvdb_show_id=? LIMIT 1', id)) return { show_key: existing.show_key, existing: true, episodes: one('SELECT COUNT(*) AS n FROM episode_catalog WHERE tvdb_show_id=?', id).n };
+    if (existing && one('SELECT tvdb_show_id FROM metadata_shows WHERE tvdb_show_id=?', id) && one('SELECT tvdb_episode_id FROM episode_catalog WHERE tvdb_show_id=? LIMIT 1', id)) {
+      run('DELETE FROM removed_shows WHERE show_key=?', existing.show_key);
+      return { show_key: existing.show_key, existing: true, episodes: one('SELECT COUNT(*) AS n FROM episode_catalog WHERE tvdb_show_id=?', id).n };
+    }
     const guide = await loadGuide(id, await tvdbToken());
     if (!guide.episodes.length) throw new Error('This show has no episodes available yet. Nothing was added; try again when its guide is available.');
     const show = existing || { show_key: `tvdb:${id}`, tvtime_show_id: id, title: guide.series.name };
-    const episodes = saveGuide(show, guide, !existing);
+    const episodes = saveGuide(show, guide, !existing, true);
     return { show_key: show.show_key, existing: Boolean(existing), episodes };
   })();
   confirmations.set(id, pending);
@@ -221,7 +236,7 @@ async function searchShows(query) {
 }
 
 async function syncFollowedShows() {
-  const shows = rows(`SELECT show_key, tvtime_show_id, title FROM shows WHERE tvtime_show_id != '' UNION ALL SELECT show_key, tvtime_show_id, title FROM custom_shows WHERE tvtime_show_id != ''`);
+  const shows = rows(`SELECT show_key, tvtime_show_id, title FROM active_shows WHERE tvtime_show_id != ''`);
   const token = await tvdbToken();
   const result = { synced: 0, episodes: 0, failures: [] };
   for (const show of shows) {
@@ -253,15 +268,15 @@ function cleanText(value, label) {
 
 function dashboard() {
   const stats = {
-    shows: one(`SELECT COUNT(*) AS n FROM (SELECT show_key FROM shows UNION SELECT show_key FROM custom_shows)`).n,
-    following: one(`SELECT COUNT(*) AS n FROM shows WHERE followed = '1' AND archived != '1'`).n + one(`SELECT COUNT(*) AS n FROM custom_shows WHERE followed = '1' AND archived != '1'`).n,
+    shows: one(`SELECT COUNT(*) AS n FROM active_shows`).n,
+    following: one(`SELECT COUNT(*) AS n FROM active_shows WHERE followed = '1' AND archived != '1'`).n,
     episodes: one(`SELECT COUNT(*) AS n FROM episode_watches`).n,
     moviesWatched: one(`SELECT COUNT(DISTINCT title) AS n FROM movie_events WHERE event_type = 'watch'`).n,
     watchlistMovies: one(`SELECT COUNT(DISTINCT title) AS n FROM movie_events WHERE event_type IN ('towatch', 'watchlist')`).n + one(`SELECT COUNT(*) AS n FROM custom_movies WHERE status = 'watchlist'`).n,
   };
   const recent = rows(`
-    SELECT w.show_title AS title, 'Episode' AS kind, w.season_number, w.episode_number, w.watched_at AS occurred_at, w.show_key, m.first_aired
-    FROM episode_watches w LEFT JOIN shows s ON s.show_key=w.show_key LEFT JOIN metadata_shows m ON m.tvdb_show_id=s.tvtime_show_id
+    SELECT w.show_title AS title, 'Episode' AS kind, w.season_number, w.episode_number, w.watched_at AS occurred_at, CASE WHEN EXISTS(SELECT 1 FROM removed_shows r WHERE r.show_key=w.show_key) THEN NULL ELSE w.show_key END AS show_key, m.first_aired
+    FROM episode_watches w LEFT JOIN library_shows s ON s.show_key=w.show_key LEFT JOIN metadata_shows m ON m.tvdb_show_id=s.tvtime_show_id
     UNION ALL
     SELECT title, 'Movie' AS kind, '', '', COALESCE(watch_date, event_at), NULL, NULL FROM movie_events WHERE event_type = 'watch'
     ORDER BY occurred_at DESC LIMIT 10
@@ -269,7 +284,7 @@ function dashboard() {
   const continueWatching = rows(`
     SELECT s.title, s.show_key, m.poster_url, m.first_aired, MAX(e.watched_at) AS last_watched,
            (SELECT 'S' || e2.season_number || 'E' || e2.episode_number FROM episode_watches e2 WHERE e2.show_key=s.show_key ORDER BY e2.watched_at DESC, e2.rowid DESC LIMIT 1) AS latest_episode
-    FROM shows s JOIN episode_watches e ON e.show_key=s.show_key LEFT JOIN metadata_shows m ON m.tvdb_show_id=s.tvtime_show_id
+    FROM active_shows s JOIN episode_watches e ON e.show_key=s.show_key LEFT JOIN metadata_shows m ON m.tvdb_show_id=s.tvtime_show_id
     WHERE s.followed='1' AND s.archived != '1'
     GROUP BY s.show_key ORDER BY last_watched DESC LIMIT 8
   `);
@@ -282,6 +297,24 @@ function api(req, res, url) {
     const query = cleanText(url.searchParams.get('q'), 'Search');
     return searchShows(query).then(matches => json(res, 200, matches));
   }
+  if (req.method === 'GET' && path === '/api/shows/removed') {
+    return json(res, 200, rows(`SELECT s.show_key, s.title, s.tvtime_show_id, r.removed_at,
+      (SELECT COUNT(*) FROM episode_watches w WHERE w.show_key=s.show_key) AS watch_count
+      FROM library_shows s JOIN removed_shows r ON r.show_key=s.show_key ORDER BY r.removed_at DESC, s.title`));
+  }
+  if (req.method === 'POST' && /^\/api\/shows\/[^/]+\/(remove|restore)$/.test(path)) return body(req).then(input => {
+    const action = path.endsWith('/remove') ? 'remove' : 'restore';
+    const key = decodeURIComponent(path.slice('/api/shows/'.length, -(action.length + 1)));
+    const show = one('SELECT title FROM library_shows WHERE show_key=?', key);
+    if (!show) return json(res, 404, { error: 'Show not found' });
+    if (action === 'remove') {
+      if (input.confirm_title !== show.title) return json(res, 400, { error: 'Type the exact show title to confirm removal' });
+      run('INSERT INTO removed_shows VALUES (?, ?) ON CONFLICT(show_key) DO NOTHING', key, now());
+    } else {
+      run('DELETE FROM removed_shows WHERE show_key=?', key);
+    }
+    return json(res, 200, { ok: true, show_key: key, history_preserved: true });
+  });
   if (req.method === 'GET' && path === '/api/dashboard') return json(res, 200, dashboard());
   if (req.method === 'GET' && path === '/api/shows') {
     const q = (url.searchParams.get('q') || '').trim();
@@ -291,11 +324,7 @@ function api(req, res, url) {
       (SELECT COUNT(*) FROM episode_catalog e WHERE e.tvdb_show_id=library.tvtime_show_id AND e.is_special=0 AND e.aired_at != '' AND date(e.aired_at) <= date('now')) AS available_episodes,
       (SELECT COUNT(DISTINCT w.episode_tvtime_id) FROM episode_watches w JOIN episode_catalog e ON e.tvdb_episode_id=w.episode_tvtime_id WHERE e.tvdb_show_id=library.tvtime_show_id AND e.is_special=0 AND e.aired_at != '' AND date(e.aired_at) <= date('now')) AS catalog_watched_episodes,
       (SELECT MAX(watched_at) FROM episode_watches e WHERE e.show_key = library.show_key) AS last_watched
-      FROM (
-        SELECT show_key, tvtime_show_id, title, followed, favorited, archived, episodes_seen_reported, followed_at, updated_at FROM shows
-        UNION ALL
-        SELECT show_key, tvtime_show_id, title, followed, favorited, archived, episodes_seen_reported, followed_at, updated_at FROM custom_shows
-      ) library LEFT JOIN metadata_shows m ON m.tvdb_show_id=library.tvtime_show_id
+      FROM active_shows library LEFT JOIN metadata_shows m ON m.tvdb_show_id=library.tvtime_show_id
       WHERE library.title LIKE ? ORDER BY library.archived, library.followed DESC, library.title COLLATE NOCASE`, filter));
   }
   if (req.method === 'GET' && path === '/api/movies') {
@@ -315,21 +344,22 @@ function api(req, res, url) {
   }
   if (req.method === 'GET' && path === '/api/upcoming') {
     return json(res, 200, rows(`
-      SELECT e.tvdb_episode_id, e.tvdb_show_id, s.title AS show_title, m.poster_url, e.season_number, e.episode_number, e.title, e.aired_at, e.runtime,
+      SELECT e.tvdb_episode_id, e.tvdb_show_id, s.show_key, s.title AS show_title, m.poster_url, e.season_number, e.episode_number, e.title, e.aired_at, e.runtime,
              EXISTS(SELECT 1 FROM episode_watches w WHERE w.episode_tvtime_id=e.tvdb_episode_id) AS watched
-      FROM episode_catalog e JOIN (SELECT show_key, tvtime_show_id, title, followed, archived FROM shows UNION ALL SELECT show_key, tvtime_show_id, title, followed, archived FROM custom_shows) s ON s.tvtime_show_id=e.tvdb_show_id LEFT JOIN metadata_shows m ON m.tvdb_show_id=e.tvdb_show_id
+      FROM episode_catalog e JOIN active_shows s ON s.tvtime_show_id=e.tvdb_show_id LEFT JOIN metadata_shows m ON m.tvdb_show_id=e.tvdb_show_id
       WHERE s.followed='1' AND s.archived != '1' AND e.is_special=0 AND date(e.aired_at) >= date('now') AND date(e.aired_at) < date('now', '+3 months')
       ORDER BY e.aired_at, s.title, e.season_number, e.episode_number LIMIT 100`));
   }
   if (req.method === 'GET' && /^\/api\/shows\/[^/]+\/episodes$/.test(path)) {
     const key = decodeURIComponent(path.slice('/api/shows/'.length, -'/episodes'.length));
-    const show = one(`SELECT show_key, tvtime_show_id, title, followed, archived FROM shows WHERE show_key=? UNION ALL SELECT show_key, tvtime_show_id, title, followed, archived FROM custom_shows WHERE show_key=?`, key, key);
+    const show = one(`SELECT show_key, tvtime_show_id, title, followed, archived FROM active_shows WHERE show_key=?`, key);
     if (!show) return json(res, 404, { error: 'Show not found' });
     const metadata = one('SELECT * FROM metadata_shows WHERE tvdb_show_id=?', show.tvtime_show_id) || null;
     const episodes = rows(`SELECT e.*, (SELECT COUNT(*) FROM episode_watches w WHERE w.episode_tvtime_id=e.tvdb_episode_id) AS watch_count
       FROM episode_catalog e WHERE e.tvdb_show_id=? ORDER BY e.season_number, e.episode_number`, show.tvtime_show_id);
     const seasons = rows('SELECT * FROM season_catalog WHERE tvdb_show_id=? ORDER BY season_number', show.tvtime_show_id);
-    return json(res, 200, { show, metadata, seasons, episodes });
+    const watch_count = one('SELECT COUNT(*) AS n FROM episode_watches WHERE show_key=?', key).n;
+    return json(res, 200, { show, metadata, seasons, episodes, watch_count });
   }
   if (req.method === 'POST' && path === '/api/sync/shows') return syncFollowedShows().then(result => json(res, 200, result));
   if (req.method === 'POST' && path === '/api/shows') return body(req).then(async input => {
@@ -342,6 +372,7 @@ function api(req, res, url) {
     const key = decodeURIComponent(path.slice('/api/shows/'.length));
     if (!['followed', 'favorited', 'archived'].includes(input.field)) throw new Error('Unsupported show field');
     const value = input.value ? '1' : '0';
+    if (!one('SELECT show_key FROM active_shows WHERE show_key=?', key)) return json(res, 404, { error: 'Show not found in library' });
     const inSeed = one('SELECT show_key FROM shows WHERE show_key=?', key);
     run(`UPDATE ${inSeed ? 'shows' : 'custom_shows'} SET ${input.field}=?, updated_at=? WHERE show_key=?`, value, now(), key);
     json(res, 200, { ok: true });
@@ -349,7 +380,7 @@ function api(req, res, url) {
   if (req.method === 'POST' && path === '/api/episodes/watch') return body(req).then(input => {
     const showKey = cleanText(input.show_key, 'Show'); const season = Number(input.season); const episode = Number(input.episode);
     if (!Number.isInteger(season) || season < 0 || !Number.isInteger(episode) || episode < 1) throw new Error('Season and episode must be valid numbers');
-    const show = one(`SELECT title FROM shows WHERE show_key=? UNION ALL SELECT title FROM custom_shows WHERE show_key=?`, showKey, showKey);
+    const show = one(`SELECT title FROM active_shows WHERE show_key=?`, showKey);
     if (!show) throw new Error('Show not found');
     run('INSERT INTO episode_watches VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', `local-${crypto.randomUUID()}`, '', showKey, show.title, String(season), String(episode), now(), now(), input.rewatch ? 'rewatch' : 'watch', 'manual');
     json(res, 201, { ok: true });
@@ -359,7 +390,7 @@ function api(req, res, url) {
     const episode = one(`SELECT e.tvdb_episode_id, e.tvdb_show_id, e.season_number, e.episode_number, m.title AS show_title
       FROM episode_catalog e JOIN metadata_shows m ON m.tvdb_show_id=e.tvdb_show_id WHERE e.tvdb_episode_id=?`, episodeId);
     if (!episode) throw new Error('Episode not found in the local guide');
-    const show = one(`SELECT show_key FROM shows WHERE tvtime_show_id=? UNION ALL SELECT show_key FROM custom_shows WHERE tvtime_show_id=?`, episode.tvdb_show_id, episode.tvdb_show_id);
+    const show = one(`SELECT show_key FROM active_shows WHERE tvtime_show_id=?`, episode.tvdb_show_id);
     if (!show) throw new Error('This episode is not linked to a show in your library');
     const kind = input.rewatch ? 'rewatch' : 'watch';
     run('INSERT INTO episode_watches VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', `local-${crypto.randomUUID()}`, episode.tvdb_episode_id, show.show_key, episode.show_title, String(episode.season_number), String(episode.episode_number), now(), now(), kind, 'manual');

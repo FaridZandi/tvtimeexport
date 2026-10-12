@@ -1,0 +1,13 @@
+.show-management{margin:28px 0;padding:16px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+.show-management summary,.removed-library summary{cursor:pointer;font-weight:700;padding:8px 0}
+.remove-show-button{border:1px solid #b57367;border-radius:7px;background:#fff5f2;color:#913c30;padding:10px 13px;font-weight:700}
+.remove-show-button:disabled{opacity:.45;cursor:not-allowed}
+.remove-show-button:focus-visible{outline:3px solid #913c30;outline-offset:3px}
+.removal-identity{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+#removeShowForm p{line-height:1.5}#removeShowForm input{width:100%;box-sizing:border-box}
+#removeShowForm label strong{overflow-wrap:anywhere}#removeShowForm .form-actions{flex-wrap:wrap}
+#removeShowForm #removeStatus{color:#913c30;font-size:13px}
+.removed-library{margin-top:28px;padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.removed-show{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line)}
+.removed-show>div{min-width:0;overflow-wrap:anywhere}.removed-show small{display:block;color:var(--muted);font-size:12px;margin-top:5px}
+.removed-show button{flex-shrink:0}

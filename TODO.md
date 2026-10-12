@@ -38,6 +38,15 @@ Historical plans remain context: [project guide](README.md).
 
 ## Done
 
+- [x] REEL-007 Add cautious, reversible show removal
+  Priority: P1
+  Order: 1
+  Context: User has two earlier Pantheon additions and cannot remove them. Removal should be generally hard to do. User explicitly chose to preserve watch history and remove only from the library.
+  Done when: Every show, including title-only local entries, has a tucked-away management/removal action. A dialog identifies the exact entry, explains preserved history, and requires typing its exact title before explicit confirmation. Removed shows disappear from library, counts, queue, upcoming, and bulk sync; history and cached data remain intact. A removed-shows section provides restoration. Provider confirmation reuses removed identities without creating duplicates. Cancellation, invalid confirmation, and failures preserve data.
+  Verify: Isolated API/database tests for typed confirmation, duplicate-title identity targeting, preserved history/cache/flags, exclusion from library/stats/upcoming/sync, restoration, and provider re-add. Browser tests for empty/populated show management, cancellation, disabled confirmation, keyboard removal, restore, error retry, and narrow layout. Restart managed app and verify availability without removing real shows.
+  Notes: No dependencies. Implement soft removal with persistent tombstones; no permanent-delete option and no automatic removal of the user's Pantheon records.
+  Evidence: 2026-10-12: node --check passed for server.mjs and public/app.js; npm test passed 17 tests including 5 new isolated removal tests, and npm run test:browser passed 5 Chromium tests including 2 new removal tests at 1280px/390px. Verified exact-title server/UI guards, one-of-two duplicate targeting, cancellation, retained watch events/cache/flags, persisted tombstones, exclusion from stats/queue/upcoming/sync/new watches, provider re-add without duplication, removal/restore error retries, restored progress, and safe removed-route navigation. Fixture removal dialogs visually reviewed. Restarted ReelTime through App Manager; it reported healthy, and live dashboard/removed-shows endpoints returned HTTP 200. In the existing Chrome tab an older title-only Pantheon entry displayed collapsed Manage show and the removal action after expansion. No real show was removed/restored/added during verification. PROJECT_BRIEF.md and README.md updated. Tests use disposable databases and mocked providers; private-library integrity and live removal/restore writes were not separately verified.
+
 - [x] REEL-006 Search and confirm show matches before adding and syncing
   Priority: P1
   Order: 1
