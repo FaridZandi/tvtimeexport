@@ -1,4 +1,4 @@
-import { mountShowSearch } from './show-search.js';
+import { mountMediaSearch } from './show-search.js';
 const app = document.querySelector('#app');
 const nav = document.querySelector('#nav');
 const dialog = document.querySelector('#dialog');
@@ -81,7 +81,10 @@ async function upcoming() {
   calendar.render();
 }
 
-async function movies() { const list = await get('/api/movies'); app.innerHTML = `<div class="page-top"><div><p class="eyebrow">Film log</p><h1>Movies</h1><p class="sub">Watched films and the ones you mean to get to.</p></div><button class="primary" data-add-movie>＋ Add movie</button></div><section class="movie-grid">${list.map(item => `<article class="movie-card"><h2>${escape(item.title)}</h2><p>${item.last_activity ? `Last activity ${date(item.last_activity)}` : 'Added manually'}</p><div>${item.watched ? '<span class="tag good">Watched</span>' : ''}${item.watchlist ? '<span class="tag">Watchlist</span>' : ''}</div></article>`).join('')}</section>`; }
+async function movies() {
+  const list = await get('/api/movies');
+  app.innerHTML = `<div class="page-top"><div><p class="eyebrow">Film log</p><h1>Movies</h1><p class="sub">Watched films and the ones you mean to get to.</p></div><button class="primary" data-add-movie="true">＋ Add movie</button></div>${syncNoticeMarkup()}<section class="movie-grid">${list.map(item => `<article class="movie-card">${item.movie_key ? image(item.poster_url, item.title, 'movie-poster') : ''}<h2>${escape(item.title)}</h2>${item.movie_key ? `<p>${escape([item.year, item.country].filter(Boolean).join(' · ') || 'Year / country unavailable')} · ${item.runtime == null ? 'Runtime unknown' : `${item.runtime} min`}</p><p class="movie-overview">${escape(item.overview || 'No summary available.')}</p><small>TheTVDB ${escape(item.tvdb_movie_id)}</small>` : '<small>Existing title-only entry</small>'}<p>${item.last_activity ? `Last activity ${date(item.last_activity)}` : 'Added manually'}</p><div>${item.watched ? '<span class="tag good">Watched</span>' : ''}${item.watchlist ? '<span class="tag">Watchlist</span>' : ''}</div></article>`).join('')}</section>`;
+}
 async function history() { const list = await get('/api/history'); app.innerHTML = `<p class="eyebrow">Chronological log</p><h1>Watch history</h1><p class="sub">The latest 250 recorded activities.</p><div class="history-list">${list.map(item => `<div class="history-row"><div class="dot">${item.type === 'movie' ? '◆' : '▶'}</div><div><b>${escape(item.title)}</b><small>${escape(item.event_kind)}${episode(item) ? ' · ' + episode(item) : ''}</small></div><time>${date(item.occurred_at)}</time></div>`).join('')}</div>`; }
 
 let activeShow = null;
@@ -130,12 +133,13 @@ async function restoreShow(key, button) {
 let disposeSearch = () => {};
 function showAdd(kind = 'show') {
   disposeSearch();
-  if (kind === 'show') {
-    disposeSearch = mountShowSearch(dialog, { get, send, escape, onMovie: () => showAdd('movie'), onAdded: key => { syncNotice = 'Show added and episode guide synced.'; showEpisodes(key); } });
-    if (!dialog.open) dialog.showModal();
-    return;
-  }
-  dialog.innerHTML = `<form method="dialog" class="modal" id="addForm"><h2>Add to your tracker</h2><div class="tabs"><button type="button" class="${kind === 'show' ? 'selected' : ''}" data-kind="show">Show</button><button type="button" class="${kind === 'movie' ? 'selected' : ''}" data-kind="movie">Movie</button></div><label>Title<input name="title" required autofocus placeholder="e.g. The Bear" /></label>${kind === 'movie' ? '<label>Status<select name="status"><option value="watchlist">Add to watchlist</option><option value="watched">Already watched</option></select></label>' : ''}<div class="form-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">Add ${kind}</button></div></form>`; if (!dialog.open) dialog.showModal(); dialog.querySelectorAll('[data-kind]').forEach(button => button.onclick = () => showAdd(button.dataset.kind)); dialog.querySelector('[data-close]').onclick = () => dialog.close(); dialog.querySelector('#addForm').onsubmit = async event => { event.preventDefault(); try { await send(kind === 'show' ? '/api/shows' : '/api/movies', 'POST', Object.fromEntries(new FormData(event.target))); dialog.close(); setPage(kind === 'show' ? 'shows' : 'movies'); } catch (error) { alert(error.message); } }; }
+  disposeSearch = mountMediaSearch(dialog, { kind, get, send, escape, onKind: showAdd, onAdded: result => {
+    syncNotice = kind === 'show' ? 'Show added and episode guide synced.' : `${result.title} ${result.existing ? 'confirmed in' : 'added to'} your movies.`;
+    if (kind === 'show') showEpisodes(result.show_key); else { if (location.hash === '#movies') movies(); else setPage('movies'); }
+  } });
+  if (!dialog.open) dialog.showModal();
+  else dialog.querySelector('#providerQuery').focus();
+}
 function showEpisode(key) { dialog.innerHTML = `<form method="dialog" class="modal" id="episodeForm"><h2>Log an episode</h2><label>Season<input name="season" type="number" min="0" value="1" required /></label><label>Episode<input name="episode" type="number" min="1" value="1" required /></label><label class="check"><input name="rewatch" type="checkbox" /> This is a rewatch</label><div class="form-actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">Log episode</button></div></form>`; dialog.showModal(); dialog.querySelector('[data-close]').onclick = () => dialog.close(); dialog.querySelector('#episodeForm').onsubmit = async event => { event.preventDefault(); const form = new FormData(event.target); try { await send('/api/episodes/watch', 'POST', { show_key: key, season: form.get('season'), episode: form.get('episode'), rewatch: form.get('rewatch') === 'on' }); dialog.close(); showEpisodes(key); } catch (error) { alert(error.message); } }; }
 async function logCatalogEpisode(id, rewatch, button) { button.disabled = true; button.textContent = rewatch ? 'Rewatching…' : 'Marking…'; try { await send(`/api/episodes/${encodeURIComponent(id)}/watch`, 'POST', { rewatch }); if (activeShowKey) await showEpisodes(activeShowKey); else await render(); } catch (error) { alert(error.message); button.disabled = false; button.textContent = rewatch ? '↻ Rewatch' : '✓ Watch'; } }
 async function sync() { const button = document.querySelector('[data-sync]'); if (button) { button.disabled = true; button.textContent = 'Syncing…'; } syncNotice = 'Syncing every show in your library. This can take a moment…'; if (button) button.insertAdjacentHTML('afterend', syncNoticeMarkup()); try { const result = await send('/api/sync/shows', 'POST', {}); const failures = result.failures?.length ? ` ${result.failures.length} show${result.failures.length === 1 ? '' : 's'} could not be refreshed.` : ''; syncNotice = `Sync complete: ${result.synced} shows and ${result.episodes.toLocaleString()} episodes refreshed.${failures}`; render(); } catch (error) { syncNotice = `Sync failed: ${error.message}`; render(); } }

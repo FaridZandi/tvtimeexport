@@ -59,6 +59,21 @@ and confirming an identity already in the library opens the existing show.
 Shows with no available episodes cannot be added yet. Existing title-only local
 shows are preserved; this flow does not guess identities for them.
 
+## Adding a movie
+
+Choose **Add → Movie** or **Movies → Add movie**, type a title, and inspect up to
+three ranked suggestions. Previews show artwork, year/country, director or studio
+when available, runtime, and synopsis; missing runtime is labeled unknown.
+Select the right match, choose **Add to watchlist** or **Already watched**, then
+**Confirm and add**. Nothing is saved before confirmation.
+
+Confirmation loads movie metadata and saves the provider identity. Repeated
+confirmation reuses that identity without duplicating watch events. Choosing
+watched upgrades a watchlist entry; an already-watched movie stays watched.
+Same-name movies with different provider IDs remain separate. Older title-only
+entries/history stay intact and are labeled separately; no identities are guessed
+from titles. Failed search/add requests can be retried in the dialog.
+
 ## Removing and restoring shows
 
 Open a show, expand **Manage show**, and choose **Remove from library…**.

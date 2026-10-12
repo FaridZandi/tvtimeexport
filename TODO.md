@@ -38,6 +38,15 @@ Historical plans remain context: [project guide](README.md).
 
 ## Done
 
+- [x] REEL-008 Search and confirm movie matches before adding
+  Priority: P1
+  Order: 1
+  Context: User wants the show workflow applied to movies: search, suggestions, confirm, add. Existing movie additions are title-only and do not identify the selected provider movie.
+  Done when: Both Add → Movie and Movies → Add movie use provider search with up to three ranked previews, artwork fallback, distinguishing year/country/details, and unknown runtime labeling. Loading, no-results, retry, stale-query/tab/closed-modal guards and keyboard/narrow-layout support match shows. Selection and explicit confirmation are required before adding. Watched/watchlist choice remains. Confirmation stores provider identity and metadata; duplicates/retries do not duplicate movies or watch events, and failures leave prior history intact. Same-name provider movies remain distinct and legacy records are preserved without guessed matches.
+  Verify: Isolated provider/API/database tests for ranked/movie-only search, missing metadata, errors/retry, watched/watchlist persistence, duplicate/concurrent confirmation, same-title distinct IDs, legacy preservation and rollback. Browser tests for both entry points, tabs, three suggestions, stale queries/modal, keyboard confirmation, pending/error/retry, status choice and mobile layout. Restart managed app and verify live movie search/UI without adding real movies.
+  Notes: No dependencies. Reuse shared show search interaction and existing TheTVDB credentials; this task does not add movie removal.
+  Evidence: 2026-10-12: node --check passed for server.mjs, public/app.js and public/show-search.js; npm test passed 22 tests (5 new movie API/database tests); npm run test:browser passed 8 Chromium tests (3 new movie tests). Verified movie-only ranked top-three search/remake details, absent artwork/runtime, no results/provider errors, typed-name rejection, watched/watchlist metadata persistence, concurrent/repeated confirmation without duplicate movies/watch events, no watched downgrade, distinct same-title IDs, unchanged legacy records, transactional rollback/retry, both entry points, explicit keyboard confirmation with no earlier writes, pending/error/retry UI, closed-modal/tab/query stale guards and 390px overflow. Desktop/mobile fixture screenshots visually reviewed. Restarted managed ReelTime successfully; live GET /api/movies/search?q=Dune returned HTTP 200 with three named/year/runtime previews, and a separate Chrome tab displayed the same movie suggestions and status choice with confirmation disabled until selection. Preserved the existing user dialog. No real movie was added during verification. README.md and PROJECT_BRIEF.md updated. Live confirmation writes/private-library integrity/CDN/calendar/snapshot recovery were not verified; all write tests used disposable databases and fixture providers.
+
 - [x] REEL-007 Add cautious, reversible show removal
   Priority: P1
   Order: 1

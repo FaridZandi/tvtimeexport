@@ -1,7 +1,7 @@
 # ReelTime project brief
 
 Last verified: 2026-10-12 against source, fixture tests, and the restarted app
-(read-only endpoint/UI checks; live removal was not performed).
+(read-only search/endpoint/UI checks; live add/removal writes were not performed).
 
 ## Purpose and orientation
 
@@ -61,8 +61,9 @@ and `#show/<encoded-show-key>`. App Manager also launches the server and uses
   movies, history, upcoming releases, and show episode details. POST/PATCH routes
   add items, update show flags, remove/restore library membership, log watches, and sync guides.
 - [public/app.js](public/app.js): vanilla JavaScript hash-routed UI;
-  [public/show-search.js](public/show-search.js) owns the debounced search/confirmation
-  dialog, selection and stale-response guards. Show pages include a collapsed
+  [public/show-search.js](public/show-search.js) exports `mountMediaSearch` for the
+  shared show/movie search dialog, selection, status choice and stale-response guards.
+  Show pages include a collapsed
   Manage show section with typed-title removal confirmation; the library includes
   a Removed shows restore section. The UI uses those
   APIs; [public/index.html](public/index.html) loads component CSS and the
@@ -97,6 +98,20 @@ Ownership and behavior were checked in [dashboard.py](../../dashboard.py) and
 [tools/data_ops.py](../../tools/data_ops.py). Recovery remains unverified; use the
 canonical backlog before proposing a restore procedure.
 
+Movie search uses GET `/api/movies/search` with TheTVDB movie-only search and
+extended details/translations. It reuses show ranking and previews at most three
+matches with identifying details and nullable runtime. POST `/api/movies` now
+requires a confirmed `provider_id` and `status` (`watchlist` or `watched`), replacing
+title-only creation. `provider_movies` stores stable identities and metadata;
+`movie_events.movie_key` is a new nullable column linking confirmed watch events.
+Confirmation saves metadata/status/event together in a transaction. Repeated or
+concurrent confirmation does not duplicate movies or watches; watched entries never
+downgrade to watchlist. Same-name provider IDs remain distinct. Imported events
+and old `custom_movies` stay intact, unlinked, and appear as title-only entries;
+they are not automatically merged with provider movies. Movie cards now show
+poster/year/country/runtime/synopsis for confirmed entries. Dashboard movie counts
+use provider keys where available; old records retain title-based counting.
+
 Removal preserves original records and caches. `removed_shows` stores membership
 tombstones; `library_shows` combines imported/custom records and `active_shows`
 excludes tombstones. Library counts, queue, upcoming, watches and bulk sync use
@@ -122,7 +137,7 @@ Each successful guide replacement is transactional; other shows may fail
 independently. The bulk-sync UI currently reports only the failure count.
 Upcoming data covers followed, unarchived imported shows, excludes specials, and is
 limited to 100 releases over the next three months; provider-linked custom shows
-are included. Ratings/emotions remain raw codes and movie external IDs/list-title
+are included. Ratings/emotions remain raw codes and imported movie external IDs/list-title
 resolution are incomplete (archive guide).
 
 ## Verify and maintain
@@ -137,14 +152,16 @@ npm test
 npm run test:browser
 ```
 
-These passed on 2026-10-12 with Node 24.7.0: 17 tests (13 isolated
-provider/API/SQLite tests and four VM UI sync regressions), plus five Chromium
+These passed on 2026-10-12 with Node 24.7.0: 22 tests (18 isolated
+provider/API/SQLite tests and four VM UI sync regressions), plus eight Chromium
 browser tests at 1280px and 390px. Fixture teardown removes temporary databases.
 Browser checks cover typing, ranked cards, artwork fallback, keyboard selection and
 confirmation, loading/error/no-results feedback, stale/reopened searches, retry,
 no horizontal dialog overflow, populated show pages, tucked-away removal, exact
 title guards, duplicate entry targeting, removal/restore retries, preserved history
-and restoration of progress. Fixture screenshots were
+and restoration of progress. Movie checks cover both entry points, status choice,
+ranked remakes, unknown details, keyboard confirmation, pending state, error retry
+and stale-query/tab/modal guards. Fixture screenshots were
 visually reviewed. `npm ci --ignore-scripts` also passed against the lockfile.
 Tests require loopback sockets; the sandbox needed an approved escalation.
 The fixture checks mock provider responses and block browser remote requests.
@@ -152,7 +169,9 @@ On 2026-10-12 the managed app restarted successfully; live read-only provider se
 returned three populated matches and the existing Chrome dialog displayed Pantheon
 results. The managed app was restarted again for removal; dashboard and removed-show
 endpoints returned HTTP 200, and an older title-only entry displayed Manage show
-and its removal action. No live add/remove/restore was performed. Restart runs normal startup
+and its removal action. A further restart enabled movies: live Dune search returned
+HTTP 200 with three previews and runtimes, and Chrome displayed suggestions with
+status choice/disabled confirmation. No live add/remove/restore was performed. Restart runs normal startup
 migrations, but private-data integrity was not separately checked. CDN/calendar,
 archive rebuilding and snapshot/restore remain unverified. Provider capabilities were checked against
 [TheTVDB v4 schema](https://github.com/thetvdb/v4-api/blob/main/docs/swagger.yml).
