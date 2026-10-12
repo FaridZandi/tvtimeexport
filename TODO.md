@@ -1,0 +1,57 @@
+# Development tasks
+
+The single active development backlog. IDs stay stable when tasks move.
+Use Now for at most one active task; Next for ready work; Later for ideas;
+Blocked for work waiting on a named decision or dependency; Done for completed work.
+Every task records completion criteria and verification. Done requires evidence.
+Mention the task ID in implementation commits; record commit hashes when known.
+Historical plans remain context: [project guide](README.md).
+
+## Now
+
+## Next
+
+- [ ] REEL-002 Test database and API behavior with isolated fixtures
+  Priority: P2
+  Order: 22
+  Context: Existing regression tests cover the sync UI with simulated responses.
+  Done when: Temporary-database tests cover writes, errors, and API responses without using the live library.
+  Verify: npm test; confirm test teardown removes temporary databases.
+
+- [ ] REEL-001 Show individual metadata-sync failures
+  Priority: P2
+  Order: 21
+  Context: The sync control and overall feedback are fixed. Partial failures still need actionable per-show detail.
+  Done when: Failed shows are named, errors are understandable, and retry targets failures without losing successes.
+  Verify: npm test; provider fixtures for partial success and retry.
+
+## Later
+
+- [ ] REEL-003 Define and test snapshot recovery
+  Priority: P2
+  Order: 23
+  Context: App Manager can create SQLite snapshots; the restore procedure needs a verified workflow.
+  Done when: A documented restore is demonstrated using a disposable database.
+  Verify: Compare integrity and record counts before and after recovery.
+
+## Blocked
+
+## Done
+
+- [x] REEL-005 Write and verify the project brief for incoming agents
+  Priority: P2
+  Order: 1
+  Context: New Codex sessions receive a task snapshot but lack project orientation, recent decisions, user preferences, and awareness of other work. Inspect this project and produce its own concise, durable handoff document; do not assume undocumented history.
+  Done when: A root PROJECT_BRIEF.md explains the app purpose, supported entry points, how to run it, architecture and internal/external dependencies, data locations and persistence or backup behavior, development and verification commands, current work, and known pitfalls. Record established user preferences and decisions with references; explicitly label uncertainties. Link the canonical TODO.md and AGENTS.md rather than duplicating the backlog. Include a last-verified date and maintenance instructions. Add an AGENTS.md instruction to read and maintain the brief so incoming agents discover it.
+  Verify: Check commands, paths, entry points, architecture, dependency ownership, and data claims against current code and configuration. Review planning documents and the current Git state. Ensure references resolve, exclude secrets and personal data, and identify anything that could not be verified. Confirm the brief is concise enough to orient a new agent.
+  Notes: Documentation task only: inspect the project before writing. Do not invent user preferences or undocumented decisions. At completion follow the standing agent policy: verify, commit only assignment-related changes with the task ID, and push to the configured upstream; report blockers.
+  Evidence: 2026-10-11: reviewed README/archive guide, Git history/status, server/UI/importer code, package scripts, ignore rules, and external App Manager registry/dashboard/snapshot implementation. All 13 brief references resolve; 818-word brief reviewed for orientation, task criteria, and absence of secrets/personal records. node --check server.mjs and node --check public/app.js passed; npm test passed all 4 simulated UI sync tests. No live server, private database/export, provider/CDN, archive rebuild, or snapshot/recovery operation was exercised; runtime limits are explicit in the brief.
+
+- [x] REEL-004 Fix metadata-sync controls and feedback
+  Priority: P2
+  Order: 24
+  Context: Controls used empty data attributes; completion now distinguishes success and partial failures.
+  Done when: Controls dispatch requests and present pending, success, and failure states.
+  Verify: npm test
+  Evidence: 4 UI regression tests passed on 2026-09-30 using simulated provider responses; live provider acceptance was not performed.
+  Commit: f2267c7
